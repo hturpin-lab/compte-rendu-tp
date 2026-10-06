@@ -1,0 +1,78 @@
+{
+  "app": "compte-rendu-tp",
+  "version": 1,
+  "modele": "vide-tp",
+  "entete": {
+    "titre": "TP n° … — (titre du TP à compléter par le professeur)",
+    "noms": "",
+    "classe": "",
+    "date": "",
+    "duree": ""
+  },
+  "sections": {
+    "problematique": {
+      "texte": "",
+      "images": []
+    },
+    "materiel": {
+      "texte": "",
+      "images": []
+    },
+    "hypotheses": {
+      "texte": "",
+      "images": []
+    },
+    "protocole": {
+      "texte": "",
+      "images": []
+    },
+    "resultats": {
+      "texte": "",
+      "images": []
+    },
+    "exploitation": {
+      "texte": "",
+      "images": []
+    },
+    "conclusion": {
+      "texte": "",
+      "images": []
+    },
+    "annexes": {
+      "texte": "",
+      "images": []
+    }
+  },
+  "mesures": [
+    {
+      "grandeur": "",
+      "symbole": "",
+      "theo": "",
+      "mes": "",
+      "unite": ""
+    },
+    {
+      "grandeur": "",
+      "symbole": "",
+      "theo": "",
+      "mes": "",
+      "unite": ""
+    },
+    {
+      "grandeur": "",
+      "symbole": "",
+      "theo": "",
+      "mes": "",
+      "unite": ""
+    }
+  ],
+  "calculs": [
+    {
+      "titre": "",
+      "formule": "",
+      "application": "",
+      "resultat": "",
+      "unite": ""
+    }
+  ]
+}
