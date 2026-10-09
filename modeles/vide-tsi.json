@@ -1,0 +1,86 @@
+{
+  "app": "compte-rendu-tp",
+  "version": 2,
+  "modele": "vide-tsi",
+  "entete": {
+    "titre": "TP n° … — (titre du TP à compléter par le professeur)",
+    "noms": "",
+    "classe": "",
+    "date": "",
+    "duree": ""
+  },
+  "sections": {
+    "problematique": {
+      "texte": "",
+      "images": []
+    },
+    "materiel": {
+      "texte": "",
+      "images": []
+    },
+    "hypotheses": {
+      "texte": "",
+      "images": []
+    },
+    "protocole": {
+      "texte": "",
+      "images": []
+    },
+    "resultats": {
+      "texte": "",
+      "images": []
+    },
+    "exploitation": {
+      "texte": "",
+      "images": []
+    },
+    "conclusion": {
+      "texte": "",
+      "images": []
+    },
+    "annexes": {
+      "texte": "",
+      "images": []
+    }
+  },
+  "mesures": [
+    {
+      "grandeur": "",
+      "symbole": "",
+      "theo": "",
+      "uref": "",
+      "mes": "",
+      "u": "",
+      "unite": ""
+    },
+    {
+      "grandeur": "",
+      "symbole": "",
+      "theo": "",
+      "uref": "",
+      "mes": "",
+      "u": "",
+      "unite": ""
+    },
+    {
+      "grandeur": "",
+      "symbole": "",
+      "theo": "",
+      "uref": "",
+      "mes": "",
+      "u": "",
+      "unite": ""
+    }
+  ],
+  "calculs": [
+    {
+      "titre": "",
+      "formule": "",
+      "application": "",
+      "resultat": "",
+      "unite": ""
+    }
+  ],
+  "theme": "tsi",
+  "niveau": "tsi"
+}

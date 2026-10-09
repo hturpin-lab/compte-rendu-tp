@@ -1,23 +1,27 @@
-/* Compte rendu de TP — 1re SI — feuille d’impression A4
- * Seul le bloc #impression (généré par js/app.js) est imprimé : pas de boutons ni de champs. */
+/* Compte rendu de TP — feuille d’impression A4
+ * Seul le bloc #impression (généré par js/app.js) est imprimé : pas de boutons ni de champs.
+ * Couleurs : palette du thème actif (--c-… définies dans css/style.css), jamais celles du mode Sombre ou Fort contraste.
+ * Le pied de page gauche (niveau) et les marges compactes sont ajoutés par js/rendu.js (<style id="style-page">). */
 
 @page {
   size: A4;
   margin: 14mm 15mm 16mm 15mm;
   @bottom-left {
-    content: "Compte rendu de TP — 1re SI";
+    content: "Compte rendu de TP";
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    font-size: 8pt; color: #6b5a4a;
+    font-size: 8pt; color: #5f5f5f;
   }
   @bottom-right {
     content: "Page " counter(page) " / " counter(pages);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    font-size: 8pt; color: #6b5a4a;
+    font-size: 8pt; color: #5f5f5f;
   }
 }
 
+/* L’impression reste claire quel que soit le mode d’écran (y compris les marges de page) */
+:root, :root[data-mode] { color-scheme: light !important; background: #fff !important; --s-fond: #fff; }
 html, body { background: #fff !important; }
-body { font-size: 10.5pt; line-height: 1.4; color: #1f1710; }
+body { font-size: 10.5pt; line-height: 1.4; color: var(--c-texte, #1f1710); }
 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 .app, .lien-evitement, .noscript { display: none !important; }
@@ -27,60 +31,83 @@ body { font-size: 10.5pt; line-height: 1.4; color: #1f1710; }
 .p-cartouche {
   display: grid;
   grid-template-columns: 22mm minmax(0, 1fr) 62mm;
-  border: 1.2pt solid #8a3a00;
+  border: 1.2pt solid var(--c-cartouche);
   margin-bottom: 6mm;
   break-inside: avoid;
 }
 .p-case {
-  background: #e65100; color: #fff; border-right: 3mm solid #ffd54f;
+  background: var(--c-cartouche); color: #fff; border-right: 3mm solid var(--c-accent);
   display: grid; place-items: center; text-align: center;
-  font-weight: 800; font-size: 15pt; line-height: 1.1;
+  font-weight: 800; font-size: 15pt; line-height: 1.1; padding: 1mm .5mm;
 }
+.p-case-long { font-size: 11pt; }
 .p-titre { padding: 3mm 4mm; }
-.p-sur { font-size: 8pt; text-transform: uppercase; letter-spacing: .08em; color: #8a3a00; font-weight: 700; }
+.p-sur { font-size: 8pt; text-transform: uppercase; letter-spacing: .08em; color: var(--c-titre); font-weight: 700; }
 .p-h1 { font-size: 15pt; font-weight: 800; line-height: 1.2; margin-top: 1mm; }
 .p-infos {
-  margin: 0; padding: 2.5mm 4mm; background: #fff3e0; border-left: 1pt solid #e3cdb4;
+  margin: 0; padding: 2.5mm 4mm; background: var(--c-pale); border-left: 1pt solid var(--c-bord);
   display: grid; grid-template-columns: auto 1fr; gap: .6mm 3mm; font-size: 9.5pt; align-content: center;
 }
-.p-infos dt { font-weight: 700; color: #8a3a00; }
+.p-infos dt { font-weight: 700; color: var(--c-titre); }
 .p-infos dd { margin: 0; }
 
 /* Sections */
 .p-section { margin-bottom: 5mm; }
 .p-bandeau {
   display: flex; align-items: center; gap: 3mm;
-  background: #e65100; color: #fff; border-left: 2.5mm solid #ffd54f;
+  background: var(--c-bandeau); color: #fff; border-left: 2.5mm solid var(--c-accent);
   font-size: 12pt; margin: 0 0 2.5mm; padding: 1.4mm 3mm;
   break-after: avoid; page-break-after: avoid; break-inside: avoid;
 }
 .p-num {
   display: inline-grid; place-items: center; width: 6.5mm; height: 6.5mm; border-radius: 50%;
-  background: #ffd54f; color: #8a3a00; font-size: 10pt; font-weight: 800;
+  background: var(--c-accent); color: var(--c-sur-accent); font-size: 10pt; font-weight: 800;
 }
 .p-section p { margin: 0 0 2mm; orphans: 3; widows: 3; }
-.p-vide { color: #8a7867; font-style: italic; }
+.p-vide { color: #777; font-style: italic; }
 
 /* Figures : jamais coupées */
 .p-figure { margin: 3mm auto 4mm; text-align: center; break-inside: avoid; page-break-inside: avoid; }
 .p-figure img { display: block; margin: 0 auto 1.5mm; max-width: 100%; max-height: 190mm; object-fit: contain; border: .5pt solid #ddd; }
 .p-l50 { width: 50%; } .p-l75 { width: 75%; } .p-l100 { width: 100%; }
-.p-figure figcaption { font-size: 9pt; font-style: italic; color: #3d3026; }
+.p-figure figcaption { font-size: 9pt; font-style: italic; color: #333; }
 
 /* Tableau de mesures */
 .p-tableau { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm; font-size: 9pt; break-inside: avoid; }
-.p-tableau caption { text-align: left; font-weight: 700; color: #8a3a00; margin-bottom: 1mm; font-size: 10pt; }
-.p-tableau th { background: #8a3a00; color: #fff; padding: 1.4mm 1.5mm; text-align: left; font-weight: 700; border: .5pt solid #8a3a00; }
-.p-tableau td { border: .5pt solid #c9b29a; padding: 1.2mm 1.5mm; }
-.p-tableau tbody tr:nth-child(even) td { background: #fdf3e7; }
+.p-tableau.p-avec-u { font-size: 8pt; }
+.p-tableau caption { text-align: left; font-weight: 700; color: var(--c-titre); margin-bottom: 1mm; font-size: 10pt; }
+.p-tableau th { background: var(--c-entete-tableau); color: #fff; padding: 1.4mm 1.5mm; text-align: left; font-weight: 700; border: .5pt solid var(--c-entete-tableau); }
+.p-tableau td { border: .5pt solid var(--c-champ); padding: 1.2mm 1.5mm; }
+.p-tableau.p-avec-u th, .p-tableau.p-avec-u td { padding: 1mm 1.1mm; }
+.p-tableau tbody tr:nth-child(even) td { background: var(--c-ligne); }
 .p-tableau .n { text-align: right; white-space: nowrap; }
+.p-tableau .p-z-fort { color: #b3261e; font-weight: 700; }
 .p-tableau tr { break-inside: avoid; }
+.p-legende-z { font-size: 8.5pt; font-style: italic; color: #444; margin: -1.5mm 0 3mm !important; }
 
 /* Calculs */
-.p-calculs h3 { font-size: 10.5pt; color: #8a3a00; margin: 3mm 0 1.5mm; break-after: avoid; }
+.p-calculs h3 { font-size: 10.5pt; color: var(--c-titre); margin: 3mm 0 1.5mm; break-after: avoid; }
 .p-calcul {
-  border: .6pt solid #e3cdb4; border-left: 1.6mm solid #f57c00; background: #fffaf3;
+  border: .6pt solid var(--c-bord); border-left: 1.6mm solid var(--c-moyen); background: var(--c-pale);
   padding: 1.6mm 3mm; margin-bottom: 2mm; break-inside: avoid; font-size: 9.5pt;
 }
-.p-calcul-titre { font-weight: 700; color: #8a3a00; margin-bottom: .6mm; }
+.p-calcul-titre { font-weight: 700; color: var(--c-titre); margin-bottom: .6mm; }
 .p-etiq { font-weight: 700; }
+
+/* Densité compacte */
+html[data-densite="compacte"] body { font-size: 9.5pt; line-height: 1.28; }
+html[data-densite="compacte"] .p-cartouche { margin-bottom: 3.5mm; }
+html[data-densite="compacte"] .p-titre { padding: 2mm 3mm; }
+html[data-densite="compacte"] .p-infos { padding: 1.5mm 3mm; font-size: 8.5pt; }
+html[data-densite="compacte"] .p-section { margin-bottom: 3mm; }
+html[data-densite="compacte"] .p-bandeau { font-size: 10.5pt; padding: .8mm 2.5mm; margin-bottom: 1.5mm; }
+html[data-densite="compacte"] .p-num { width: 5.2mm; height: 5.2mm; font-size: 8.5pt; }
+html[data-densite="compacte"] .p-section p { margin-bottom: 1.2mm; }
+html[data-densite="compacte"] .p-figure { margin: 2mm auto 2.5mm; }
+html[data-densite="compacte"] .p-tableau { margin: 2mm 0 3mm; }
+html[data-densite="compacte"] .p-tableau td { padding: .7mm 1.1mm; }
+html[data-densite="compacte"] .p-tableau th { padding: .9mm 1.1mm; }
+html[data-densite="compacte"] .p-calcul { padding: 1mm 2.5mm; margin-bottom: 1.2mm; font-size: 8.8pt; }
+html[data-densite="compacte"] .p-calculs h3 { margin: 2mm 0 1mm; }
+
+.pied-marque, .marque { display: none !important; }

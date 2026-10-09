@@ -1,4 +1,4 @@
-/* Compte rendu de TP — 1re SI
+/* Compte rendu de TP — 1re SI / 1re STI2D / Tle SI / CPGE TSI
  * Application principale. Aucune donnée n’est envoyée sur internet :
  * l’état vit en mémoire, dans le localStorage (si disponible) et dans les fichiers .json enregistrés.
  */
@@ -8,7 +8,7 @@
   var CRTP = (window.CRTP = window.CRTP || {});
   var SECTIONS = CRTP.SECTIONS;
   var CLE_STOCKAGE = 'compte-rendu-tp:v1';
-  var VERSION = 1;
+  var VERSION = 2;   // 2 : ajout de theme, niveau, incertitudes, mesures.u / mesures.uref
 
   /* ------------------------------------------------------------------ */
   /* État                                                                */
@@ -21,6 +21,9 @@
       app: 'compte-rendu-tp',
       version: VERSION,
       modele: null,
+      theme: null,          // thème de couleurs du projet (si, sti2d, tsi)
+      niveau: null,         // niveau (1si, 1sti2d, tlesi, tsi)
+      incertitudes: false,  // Tle SI : afficher les colonnes u et z
       entete: { titre: '', noms: '', classe: '', date: '', duree: '' },
       sections: s,
       mesures: [],
@@ -36,6 +39,9 @@
     if (d.app && d.app !== 'compte-rendu-tp') throw new Error('Ce fichier .json n’est pas un compte rendu de TP.');
     var e = etatVide();
     e.modele = d.modele ? str(d.modele) : null;
+    e.theme = CRTP.themeValide(d.theme) ? d.theme : null;
+    e.niveau = CRTP.niveauValide(d.niveau) ? d.niveau : null;
+    e.incertitudes = d.incertitudes === true;
     var ent = d.entete || {};
     Object.keys(e.entete).forEach(function (k) { e.entete[k] = str(ent[k]); });
     var secs = d.sections || {};
@@ -51,7 +57,8 @@
     });
     e.mesures = (Array.isArray(d.mesures) ? d.mesures : []).map(function (m) {
       m = m || {};
-      return { grandeur: str(m.grandeur), symbole: str(m.symbole), theo: str(m.theo), mes: str(m.mes), unite: str(m.unite) };
+      return { grandeur: str(m.grandeur), symbole: str(m.symbole), theo: str(m.theo), uref: str(m.uref),
+        mes: str(m.mes), u: str(m.u), unite: str(m.unite) };
     });
     e.calculs = (Array.isArray(d.calculs) ? d.calculs : []).map(function (c) {
       c = c || {};
@@ -96,6 +103,30 @@
     if (v == null) return '';
     var d = v < 10 ? 1 : 0;
     return v.toFixed(d).replace('.', ',');
+  };
+
+  /* Écart normalisé z = |x_mes − x_réf| / √(u² + u_réf²) ; u obligatoire (> 0), u_réf facultatif (vide = 0).
+   * null si incalculable. */
+  CRTP.ecartNormalise = function (ref, mes, u, uref) {
+    var a = CRTP.nombre(ref), b = CRTP.nombre(mes), um = CRTP.nombre(u);
+    var ur = str(uref).trim() === '' ? 0 : CRTP.nombre(uref);
+    if (!isFinite(a) || !isFinite(b) || !isFinite(um) || !isFinite(ur) || um <= 0 || ur < 0) return null;
+    return Math.abs(b - a) / Math.sqrt(um * um + ur * ur);
+  };
+
+  CRTP.formatZ = function (z) {
+    if (z == null) return '';
+    if (z >= 10) return String(Math.round(z));
+    if (z > 0 && z < 0.1) return z.toFixed(2).replace('.', ',');
+    return z.toFixed(1).replace('.', ',');
+  };
+
+  /* Sections et options du niveau du projet */
+  function secs() { return CRTP.sectionsPour(etat.niveau); }
+  function niv() { return CRTP.niveau(etat.niveau); }
+  CRTP.avecIncertitudes = function (e) {
+    var n = CRTP.niveau(e.niveau);
+    return !!(n.incertitudes || (n.optionIncertitudes && e.incertitudes));
   };
 
   /* Numérotation des figures dans l’ordre du document */
@@ -161,8 +192,12 @@
   }
   function programmerSauvegarde() {
     clearTimeout(minuterieSauvegarde);
-    minuterieSauvegarde = setTimeout(sauvegarderMaintenant, 700);
+    minuterieSauvegarde = setTimeout(function () { minuterieSauvegarde = null; sauvegarderMaintenant(); }, 700);
   }
+  // Fermeture ou rechargement juste après une saisie : on enregistre tout de suite ce qui était en attente.
+  window.addEventListener('pagehide', function () {
+    if (minuterieSauvegarde) { clearTimeout(minuterieSauvegarde); minuterieSauvegarde = null; sauvegarderMaintenant(); }
+  });
   function lireSauvegarde() {
     try {
       var t = window.localStorage.getItem(CLE_STOCKAGE);
@@ -181,17 +216,61 @@
   /* Construction de l’interface                                          */
   /* ------------------------------------------------------------------ */
 
+  function hauteurMin() {
+    return document.documentElement.getAttribute('data-densite') === 'compacte' ? 46 : 72;
+  }
   function ajusterHauteur(ta, min) {
     ta.style.height = 'auto';
-    ta.style.height = Math.max(ta.scrollHeight + 2, min || 72) + 'px';
+    ta.style.height = Math.max(ta.scrollHeight + 2, min || hauteurMin()) + 'px';
+  }
+  function ajusterToutesHauteurs() {
+    $all('textarea').forEach(function (ta) { ajusterHauteur(ta, ta.dataset.entete ? 44 : 0); });
   }
 
   var derniereSection = 'resultats';
 
-  function construireSections() {
-    $('#consigne-entete').innerHTML = CRTP.ENTETE.consigne;
-    $('#exemple-entete').innerHTML = CRTP.ENTETE.exemple;
+  /* Textes qui dépendent du niveau : libellés, consignes, exemples, classes proposées */
+  function appliquerNiveau() {
+    var n = niv();
+    document.title = 'Labrio — compte rendu de TP — ' + n.nom;
+    $('#pastille-niveau').textContent = n.nom;
+    var cas = $('#cartouche-case');
+    cas.innerHTML = echapper(n.cas[0]) + '<br>' + echapper(n.cas[1]);
+    cas.classList.toggle('case-long', n.cas.join('').length > 6);
+    cas.setAttribute('aria-label', n.nom);
+    var dl = $('#liste-classes');
+    dl.innerHTML = '';
+    n.classes.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c;
+      dl.appendChild(o);
+    });
+    $('#ent-classe').placeholder = n.classes[Math.min(1, n.classes.length - 1)];
+    var ent = CRTP.entetePour(etat.niveau);
+    $('#consigne-entete').innerHTML = ent.consigne;
+    $('#exemple-entete').innerHTML = ent.exemple.replace('1re SI 2', echapper(n.classes[Math.min(1, n.classes.length - 1)]));
+    secs().forEach(function (sec) {
+      var el = $('#sec-' + sec.id);
+      if (!el) return;
+      el.querySelector('.bandeau-texte').textContent = sec.titre;
+      el.querySelector('.consigne').innerHTML = sec.consigne;
+      el.querySelector('.exemple-contenu').innerHTML = sec.exemple;
+      el.querySelector('textarea').placeholder = sec.placeholder || '';
+      var input = el.querySelector('input[type=file]');
+      input.setAttribute('aria-label', 'Choisir une image pour la section ' + sec.titre);
+    });
+    var tsi = n.contenu === 'tsi';
+    var regle = $('#regle-calcul');
+    if (regle) regle.innerHTML = tsi ? CRTP.REGLE_CALCUL_TSI : CRTP.REGLE_CALCUL;
+    var opt = $('#option-incertitudes');
+    if (opt) {
+      opt.hidden = !n.optionIncertitudes;
+      $('#case-incertitudes').checked = !!etat.incertitudes;
+    }
+    dessinerMesures();
+  }
 
+  function construireSections() {
     var conteneur = $('#sections');
     var tpl = $('#tpl-section');
     SECTIONS.forEach(function (sec) {
@@ -203,19 +282,14 @@
       var h2 = el.querySelector('h2');
       h2.id = 'titre-' + sec.id;
       el.querySelector('.num').textContent = sec.num;
-      el.querySelector('.bandeau-texte').textContent = sec.titre;
-      el.querySelector('.consigne').innerHTML = sec.consigne;
-      el.querySelector('.exemple-contenu').innerHTML = sec.exemple;
       var ta = el.querySelector('textarea');
       ta.id = 'texte-' + sec.id;
-      ta.placeholder = sec.placeholder || '';
       ta.dataset.section = sec.id;
       var lab = el.querySelector('.label-texte');
       lab.htmlFor = ta.id;
       lab.textContent = sec.mesures ? 'Présentation des résultats' : 'Votre texte';
       var input = el.querySelector('input[type=file]');
       input.id = 'image-' + sec.id;
-      input.setAttribute('aria-label', 'Choisir une image pour la section ' + sec.titre);
       el.querySelector('.btn-image').setAttribute('aria-describedby', 'titre-' + sec.id);
       if (sec.mesures) construireZoneMesures(el.querySelector('.zone-mesures'));
       else el.querySelector('.zone-mesures').remove();
@@ -295,22 +369,26 @@
   function construireZoneMesures(zone) {
     zone.innerHTML =
       '<h3 class="sous-titre" id="titre-mesures">Tableau de mesures</h3>' +
+      '<label class="option-incertitudes" id="option-incertitudes" hidden><input type="checkbox" id="case-incertitudes"> ' +
+      'Afficher les incertitudes (colonnes u et écart normalisé z)</label>' +
       '<div class="tableau-defile">' +
-      '<table class="tableau-mesures" aria-labelledby="titre-mesures">' +
-      '<thead><tr><th scope="col">Grandeur</th><th scope="col">Symbole</th><th scope="col">Valeur théorique</th>' +
-      '<th scope="col">Valeur simulée / mesurée</th><th scope="col">Unité</th><th scope="col">Écart relatif (%)</th>' +
-      '<th scope="col"><span class="visually-hidden">Supprimer</span></th></tr></thead>' +
+      '<table class="tableau-mesures" id="tableau-mesures" aria-labelledby="titre-mesures">' +
+      '<thead id="mesures-entete"></thead>' +
       '<tbody id="mesures-corps"></tbody></table></div>' +
-      '<p class="aide-formule">Écart relatif = |valeur mesurée − valeur théorique| ÷ |valeur théorique| × 100 (calculé automatiquement).</p>' +
+      '<p class="aide-formule" id="aide-formule"></p>' +
       '<button type="button" class="btn" id="btn-ajout-ligne">+ Ajouter une ligne</button>' +
       '<h3 class="sous-titre" id="titre-calculs">Calculs</h3>' +
-      '<div class="consigne consigne-regle"><strong>Règle :</strong> formule littérale → application numérique → résultat <strong>avec son unité</strong>.' +
-      ' Exemple : U = U1 + U2 + U3 + U4 → U = 0,5 + 0,5 + 0,5 + 0,5 → U = 2,0 V</div>' +
+      '<div class="consigne consigne-regle" id="regle-calcul"></div>' +
       '<div id="calculs-liste" class="calculs-liste"></div>' +
       '<button type="button" class="btn" id="btn-ajout-calcul">+ Ajouter un calcul</button>';
 
+    zone.querySelector('#case-incertitudes').addEventListener('change', function (ev) {
+      etat.incertitudes = ev.target.checked;
+      dessinerMesures();
+      modifie();
+    });
     zone.querySelector('#btn-ajout-ligne').addEventListener('click', function () {
-      etat.mesures.push({ grandeur: '', symbole: '', theo: '', mes: '', unite: '' });
+      etat.mesures.push({ grandeur: '', symbole: '', theo: '', uref: '', mes: '', u: '', unite: '' });
       dessinerMesures();
       modifie();
       var lignes = $all('#mesures-corps tr');
@@ -325,40 +403,69 @@
     });
   }
 
-  var COLONNES = [
-    { cle: 'grandeur', nom: 'Grandeur', ph: 'Tension série' },
-    { cle: 'symbole', nom: 'Symbole', ph: 'U' },
-    { cle: 'theo', nom: 'Valeur théorique', ph: '2,0', num: true },
-    { cle: 'mes', nom: 'Valeur simulée / mesurée', ph: '2,00', num: true },
-    { cle: 'unite', nom: 'Unité', ph: 'V' }
-  ];
+  /* Colonnes du tableau selon le niveau (u, u_réf et z en CPGE TSI, ou en Tle SI si la case est cochée).
+   * Partagé avec l’impression et l’export Word. */
+  CRTP.colonnesMesures = function (e) {
+    var inc = CRTP.avecIncertitudes(e);
+    var tsi = CRTP.niveau(e.niveau).contenu === 'tsi';
+    var c = [
+      { cle: 'grandeur', nom: 'Grandeur', ph: 'Tension série' },
+      { cle: 'symbole', nom: 'Symbole', ph: 'U' },
+      { cle: 'theo', nom: tsi ? 'Valeur de référence x_réf' : 'Valeur théorique', court: tsi ? 'x_réf' : 'Théorique', ph: '2,0', num: true }
+    ];
+    if (inc) c.push({ cle: 'uref', nom: 'u(x_réf) (facultatif)', court: 'u(x_réf)', ph: '—', num: true });
+    c.push({ cle: 'mes', nom: tsi ? 'Valeur mesurée x_mes' : 'Valeur simulée / mesurée', court: tsi ? 'x_mes' : 'Mesurée', ph: '2,00', num: true });
+    if (inc) c.push({ cle: 'u', nom: 'u(x_mes) incertitude-type', court: 'u(x_mes)', ph: 'à saisir', num: true });
+    c.push({ cle: 'unite', nom: 'Unité', ph: 'V' });
+    c.push({ cle: 'ecart', nom: 'Écart relatif (%)', calcule: true });
+    if (inc) c.push({ cle: 'z', nom: 'Écart normalisé z', calcule: true });
+    return c;
+  };
 
   function dessinerMesures() {
     var corps = $('#mesures-corps');
+    if (!corps) return;
+    var cols = CRTP.colonnesMesures(etat);
+    var inc = CRTP.avecIncertitudes(etat);
+    $('#tableau-mesures').classList.toggle('avec-u', inc);
+    $('#mesures-entete').innerHTML = '<tr>' + cols.map(function (c) {
+      return '<th scope="col" class="col-' + c.cle + '">' + echapper(c.nom) + '</th>';
+    }).join('') + '<th scope="col" class="col-suppr"><span class="visually-hidden">Supprimer</span></th></tr>';
+    $('#aide-formule').innerHTML = inc
+      ? 'Écart relatif = |x<sub>mes</sub> − x<sub>réf</sub>| ÷ |x<sub>réf</sub>| × 100 ; ' +
+        'écart normalisé z = |x<sub>mes</sub> − x<sub>réf</sub>| ÷ √(u(x<sub>mes</sub>)² + u(x<sub>réf</sub>)²) ' +
+        '(u(x<sub>réf</sub>) vide = 0). Calculés automatiquement. Critère usuel : <strong>z ≤ 2 → compatibles</strong>.'
+      : 'Écart relatif = |valeur mesurée − valeur théorique| ÷ |valeur théorique| × 100 (calculé automatiquement).';
     corps.innerHTML = '';
     etat.mesures.forEach(function (m, i) {
       var tr = document.createElement('tr');
-      COLONNES.forEach(function (col) {
+      cols.forEach(function (col) {
+        if (col.calcule) {
+          var tdc = document.createElement('td');
+          tdc.className = col.cle;
+          tdc.setAttribute('aria-live', 'off');
+          tr.appendChild(tdc);
+          return;
+        }
         var td = document.createElement('td');
         var inp = document.createElement('input');
         inp.type = 'text';
         inp.value = m[col.cle];
         inp.placeholder = col.ph;
-        inp.className = 'cellule' + (col.num ? ' cellule-num' : '') + (col.cle === 'unite' ? ' cellule-unite' : '');
+        inp.className = 'cellule' + (col.num ? ' cellule-num' : '') + (col.cle === 'unite' ? ' cellule-unite' : '') +
+          (col.cle === 'u' ? ' cellule-u' : '');
         if (col.num) inp.inputMode = 'decimal';
         inp.setAttribute('aria-label', col.nom + ', ligne ' + (i + 1));
+        if (col.cle === 'grandeur') inp.title = inp.value;
         inp.addEventListener('input', function () {
           m[col.cle] = inp.value;
+          if (col.cle === 'grandeur') inp.title = inp.value;
           majLigne(tr, m);
           modifie();
         });
         td.appendChild(inp);
         tr.appendChild(td);
       });
-      var tdE = document.createElement('td');
-      tdE.className = 'ecart';
-      tdE.setAttribute('aria-live', 'off');
-      tr.appendChild(tdE);
       var tdS = document.createElement('td');
       var b = document.createElement('button');
       b.type = 'button';
@@ -386,6 +493,15 @@
     td.textContent = v == null ? '' : CRTP.formatEcart(v) + ' %';
     td.title = v == null ? 'Écart incalculable : il faut deux nombres et une valeur théorique non nulle.' : '';
     td.classList.toggle('ecart-fort', v != null && v > 10);
+    var tdz = tr.querySelector('.z');
+    if (tdz) {
+      var z = CRTP.ecartNormalise(m.theo, m.mes, m.u, m.uref);
+      tdz.textContent = z == null ? '' : CRTP.formatZ(z) + (z <= 2 ? ' ✓' : ' ✗');
+      tdz.title = z == null ? 'z incalculable : il faut x_réf, x_mes et u(x_mes) > 0.' : (z <= 2 ? 'Compatibles (z ≤ 2)' : 'Non compatibles (z > 2)');
+      tdz.classList.toggle('z-fort', z != null && z > 2);
+      var cu = tr.querySelector('.cellule-u');
+      if (cu) cu.classList.toggle('manque', !!m.mes.trim() && !m.u.trim());
+    }
     var u = tr.querySelector('.cellule-unite');
     var aDesValeurs = (m.theo.trim() || m.mes.trim());
     u.classList.toggle('manque', !!aDesValeurs && !m.unite.trim());
@@ -579,7 +695,27 @@
   /* Remplissage de l’interface à partir de l’état                        */
   /* ------------------------------------------------------------------ */
 
+  /* Thème et niveau d’un projet : verrou du professeur > adresse (au démarrage) > projet > choix courant */
+  function adopterRendu(e, auDemarrage) {
+    var R = CRTP.Rendu, u = R.url(), cur = R.etat();
+    var theme, niveau;
+    if (cur.verrou) {
+      theme = cur.theme;
+      niveau = cur.niveau;
+    } else if (auDemarrage) {
+      theme = u.theme || e.theme || cur.theme;
+      niveau = u.niveau || (u.theme ? CRTP.theme(u.theme).niveau : null) || e.niveau || cur.niveau;
+    } else {
+      theme = e.theme || cur.theme;
+      niveau = e.niveau || cur.niveau;
+    }
+    e.theme = theme;
+    e.niveau = niveau;
+    R.changer({ theme: theme, niveau: niveau }, 'init');
+  }
+
   function afficherEtat() {
+    appliquerNiveau();
     $all('[data-entete]').forEach(function (inp) {
       inp.value = etat.entete[inp.dataset.entete] || '';
       if (inp.tagName === 'TEXTAREA') ajusterHauteur(inp, 44);
@@ -598,6 +734,7 @@
 
   function remplacerEtat(nouveau) {
     etat = nouveau;
+    adopterRendu(etat, false);
     afficherEtat();
     sauvegarderMaintenant();
   }
@@ -629,7 +766,9 @@
     ajout('entete', !manquants.length, 'En-tête complet', 'sec-entete',
       manquants.length ? 'Manque : ' + manquants.join(', ') + '.' : '');
 
-    SECTIONS.forEach(function (sec) {
+    var tsi = CRTP.niveau(e.niveau).contenu === 'tsi';
+    var lesSections = CRTP.sectionsPour(e.niveau);
+    lesSections.forEach(function (sec) {
       if (sec.facultatif) return;
       var rempli = t(sec.id).length >= sec.minCar;
       ajout('rempli-' + sec.id, rempli, sec.num + '. ' + sec.titre + ' rédigé(e)', 'sec-' + sec.id,
@@ -669,6 +808,23 @@
     ajout('ecart', nbEcarts > 0, 'Au moins un écart relatif calculé', 'sec-resultats',
       'Remplissez une valeur théorique et une valeur simulée (nombres).');
 
+    if (tsi) {
+      var nbU = e.mesures.filter(function (m) { var u = CRTP.nombre(m.u); return isFinite(u) && u > 0; }).length;
+      ajout('tsi-incertitude', nbU > 0, 'Au moins une incertitude-type u renseignée', 'sec-resultats',
+        'Colonne u(x_mes) du tableau : type A (s/√n) ou type B (Δ/√3).');
+      var nbZ = e.mesures.filter(function (m) { return CRTP.ecartNormalise(m.theo, m.mes, m.u, m.uref) != null; }).length;
+      ajout('tsi-z', nbZ > 0, 'Au moins un écart normalisé z calculé', 'sec-resultats',
+        'Il faut x_réf, x_mes et u(x_mes) sur une même ligne.');
+      var hyp = mots(t('hypotheses'));
+      var aHyp = hyp.some(function (m) { return /^(hypoth|neglig|suppos|modele|modelis|ideal|assimil|approxim)/.test(m); });
+      ajout('tsi-hypotheses', aHyp, 'Hypothèses de modélisation explicites', 'sec-hypotheses',
+        'Écrivez ce qui est supposé ou négligé (« on néglige… », « on suppose… », « modèle… »).');
+      var conc0 = mots(t('conclusion'));
+      var seProno = conc0.some(function (m) { return /^(compatib|incompatib|normalis)/.test(m) || m === 'z'; });
+      ajout('tsi-compatibilite', seProno, 'Conclusion : se prononce sur la compatibilité', 'sec-conclusion',
+        'Dites si mesure et modèle sont compatibles (z ≤ 2) ou non.');
+    }
+
     var calculsOk = e.calculs.length > 0 && e.calculs.every(function (c) {
       return c.formule.trim() && c.application.trim() && c.resultat.trim() && c.unite.trim();
     });
@@ -676,9 +832,10 @@
       e.calculs.length ? 'Un calcul est incomplet (formule, application, résultat ou unité).' : 'Ajoutez au moins un calcul.');
 
     var ex = mots(t('exploitation'));
-    var compare = ex.some(function (m) { return /^(ecart|theori|compar|proche|differen|verifi)/.test(m); });
-    ajout('exploitation', compare && compterMots(t('exploitation')) >= 40, 'Exploitation : comparaison théorie / simulation développée', 'sec-exploitation',
-      'Au moins 40 mots, avec l’écart et la vérification de la loi.');
+    var compare = ex.some(function (m) { return /^(ecart|theori|compar|proche|differen|verifi|compatib|normalis|valid)/.test(m); });
+    ajout('exploitation', compare && compterMots(t('exploitation')) >= 40,
+      tsi ? 'Exploitation : confrontation mesure / modèle développée' : 'Exploitation : comparaison théorie / simulation développée', 'sec-exploitation',
+      tsi ? 'Au moins 40 mots, avec les écarts normalisés et la validité du modèle.' : 'Au moins 40 mots, avec l’écart et la vérification de la loi.');
 
     var cles = motsPb.filter(function (m) { return m.length >= 5 && CRTP.MOTS_VIDES.indexOf(m) < 0; });
     var conc = mots(t('conclusion'));
@@ -740,10 +897,26 @@
   }
   CRTP.dateFr = dateFr;
 
+  /* Texte d’une cellule du tableau de mesures (impression et Word) */
+  CRTP.texteCellule = function (m, col) {
+    if (col.cle === 'ecart') {
+      var v = CRTP.ecart(m.theo, m.mes);
+      return v == null ? '—' : CRTP.formatEcart(v) + ' %';
+    }
+    if (col.cle === 'z') {
+      var z = CRTP.ecartNormalise(m.theo, m.mes, m.u, m.uref);
+      return z == null ? '—' : CRTP.formatZ(z) + (z <= 2 ? ' (compatible)' : ' (non compatible)');
+    }
+    return str(m[col.cle]);
+  };
+  CRTP.LEGENDE_Z = 'z = |x_mes − x_réf| / √(u(x_mes)² + u(x_réf)²) ; critère usuel : z ≤ 2 → compatibles.';
+
   function rendreImpression() {
     var e = etat, num = CRTP.numerosFigures(e), ent = e.entete;
+    var n = CRTP.niveau(e.niveau);
     var h = [];
-    h.push('<header class="p-cartouche"><div class="p-case">1re<br>SI</div>' +
+    h.push('<header class="p-cartouche"><div class="p-case' + (n.cas.join('').length > 6 ? ' p-case-long' : '') + '">' +
+      echapper(n.cas[0]) + '<br>' + echapper(n.cas[1]) + '</div>' +
       '<div class="p-titre"><div class="p-sur">Compte rendu de TP</div><div class="p-h1">' +
       (echapper(ent.titre) || '<span class="p-vide">Titre du TP</span>') + '</div></div>' +
       '<dl class="p-infos"><dt>Nom(s)</dt><dd>' + echapper(ent.noms) + '</dd>' +
@@ -751,7 +924,7 @@
       '<dt>Date</dt><dd>' + echapper(dateFr(ent.date)) + '</dd>' +
       '<dt>Durée</dt><dd>' + echapper(ent.duree) + '</dd></dl></header>');
 
-    SECTIONS.forEach(function (sec) {
+    CRTP.sectionsPour(e.niveau).forEach(function (sec) {
       var s = e.sections[sec.id];
       var vide = !s.texte.trim() && !s.images.length && !(sec.mesures && (e.mesures.length || e.calculs.length));
       if (vide && sec.facultatif) return;
@@ -763,15 +936,21 @@
           '<figcaption><strong>Figure ' + num[im.id] + ' :</strong> ' + echapper(im.legende || '(légende manquante)') + '</figcaption></figure>');
       });
       if (sec.mesures && e.mesures.length) {
-        h.push('<table class="p-tableau"><caption>Tableau de mesures</caption><thead><tr><th>Grandeur</th><th>Symbole</th>' +
-          '<th>Valeur théorique</th><th>Valeur simulée / mesurée</th><th>Unité</th><th>Écart relatif</th></tr></thead><tbody>');
+        var cols = CRTP.colonnesMesures(e);
+        var inc = CRTP.avecIncertitudes(e);
+        h.push('<table class="p-tableau' + (inc ? ' p-avec-u' : '') + '"><caption>Tableau de mesures</caption><thead><tr>' +
+          cols.map(function (c) { return '<th>' + echapper(c.nom.replace(' (%)', '')) + '</th>'; }).join('') + '</tr></thead><tbody>');
         e.mesures.forEach(function (m) {
-          var v = CRTP.ecart(m.theo, m.mes);
-          h.push('<tr><td>' + echapper(m.grandeur) + '</td><td>' + echapper(m.symbole) + '</td><td class="n">' + echapper(m.theo) +
-            '</td><td class="n">' + echapper(m.mes) + '</td><td>' + echapper(m.unite) + '</td><td class="n">' +
-            (v == null ? '—' : CRTP.formatEcart(v) + ' %') + '</td></tr>');
+          h.push('<tr>' + cols.map(function (c) {
+            var num = c.num || c.calcule;
+            var t = CRTP.texteCellule(m, c);
+            var cls = num ? 'n' : '';
+            if (c.cle === 'z' && / \(non /.test(t)) cls += ' p-z-fort';
+            return '<td class="' + cls + '">' + echapper(t) + '</td>';
+          }).join('') + '</tr>');
         });
         h.push('</tbody></table>');
+        if (inc) h.push('<p class="p-legende-z">' + echapper(CRTP.LEGENDE_Z) + '</p>');
       }
       if (sec.mesures && e.calculs.length) {
         h.push('<div class="p-calculs"><h3>Calculs</h3>');
@@ -824,7 +1003,7 @@
     var ancien = b.textContent;
     b.textContent = 'Création du fichier Word…';
     try {
-      var blob = await CRTP.exporterDocx(etat);
+      var blob = await CRTP.exporterDocx(etat, { densite: CRTP.Rendu.etat().densite });
       telecharger(blob, nomFichier('docx'));
       info('Fichier Word créé : ' + nomFichier('docx') + '. Il s’ouvre aussi avec LibreOffice.');
     } catch (err) {
@@ -848,7 +1027,13 @@
     if (!estVide(etat) && !window.confirm('Effacer le compte rendu affiché et repartir d’une page blanche ?\n' +
       'Pensez à l’enregistrer (.json) avant si vous voulez le garder.')) return;
     remplacerEtat(etatVide());
-    try { history.replaceState(null, '', location.pathname); } catch (err) { /* sans importance */ }
+    try {
+      // on retire seulement ?modele=… : thème, niveau, verrou… restent dans l’adresse
+      var p = new URLSearchParams(location.search);
+      p.delete('modele');
+      var q = p.toString();
+      history.replaceState(null, '', location.pathname + (q ? '?' + q : ''));
+    } catch (err) { /* sans importance */ }
     info('Nouveau compte rendu.');
     $('#ent-titre').focus();
   }
@@ -868,6 +1053,17 @@
 
   async function demarrer() {
     construireSections();
+    CRTP.Rendu.construirePanneau();
+    CRTP.Rendu.ecouter(function (ch, source) {
+      if (ch.theme) etat.theme = ch.theme;
+      if (ch.niveau) { etat.niveau = ch.niveau; appliquerNiveau(); }
+      if (ch.densite) ajusterToutesHauteurs();
+      if (source !== 'init' && (ch.theme || ch.niveau)) {
+        majVerification();
+        programmerSauvegarde();
+        rendreImpression();
+      }
+    });
     $('#btn-nouveau').addEventListener('click', nouveau);
     $('#btn-ouvrir').addEventListener('click', function () { $('#input-ouvrir').click(); });
     $('#input-ouvrir').addEventListener('change', function (ev) {
@@ -911,6 +1107,7 @@
       if (!estVide(etat)) info('Votre travail en cours a été rechargé depuis ce navigateur.');
     }
 
+    adopterRendu(etat, true);
     afficherEtat();
     if (!lireSauvegarde() && !estVide(etat)) sauvegarderMaintenant();
     try { window.localStorage.getItem(CLE_STOCKAGE); etatSauvegarde(estVide(etat) ? 'Sauvegarde automatique active dans ce navigateur.' : $('#etat-sauvegarde').textContent || 'Sauvegarde automatique active.'); }

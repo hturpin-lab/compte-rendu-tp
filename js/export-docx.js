@@ -4,12 +4,29 @@
 
   var CRTP = (window.CRTP = window.CRTP || {});
 
-  var ORANGE = 'E65100', ORANGE_FONCE = '8A3A00', JAUNE = 'FFD54F', CLAIR = 'FFF3E0', GRIS = 'F2F2F2';
   var LARGEUR_UTILE = 9638;          // A4 (11906 twips) − 2 × 2 cm de marge
   var LARGEUR_PX = 640;              // ≈ 17 cm à 96 ppp
 
-  CRTP.exporterDocx = async function (etat) {
+  /* options.densite : 'aeree' (défaut) ou 'compacte' (espacements réduits) */
+  CRTP.exporterDocx = async function (etat, options) {
+    options = options || {};
     var D = window.docx;
+    var compact = options.densite === 'compacte';
+    var niveau = CRTP.niveau(etat.niveau);
+    // Couleurs du thème actif (variables CSS de la palette, indépendantes du mode d’affichage)
+    var coul = function (v, d) { return CRTP.Rendu ? CRTP.Rendu.couleur(v, d) : d; };
+    var BANDEAU = coul('--c-bandeau', 'CD4800');
+    var CARTOUCHE = coul('--c-cartouche', '8A3A00');
+    var ENTETE_TAB = coul('--c-entete-tableau', '8A3A00');
+    var TITRE = coul('--c-titre', '8A3A00');
+    var ACCENT = coul('--c-accent', 'FFD54F');
+    var CLAIR = coul('--c-pale', 'FFF3E0');
+    var LIGNE = coul('--c-ligne', 'F2F2F2');
+    var BORD = coul('--c-champ', 'BFA48A');
+    var MOYEN = coul('--c-moyen', 'F57C00');
+    var k = compact ? 0.6 : 1;          // facteur d’espacement
+    var TAILLE = compact ? 20 : 22;     // demi-points (10 pt / 11 pt)
+    function esp(x) { return Math.round(x * k); }
     var Paragraph = D.Paragraph, TextRun = D.TextRun, Table = D.Table, TableRow = D.TableRow, TableCell = D.TableCell;
     var WidthType = D.WidthType, ShadingType = D.ShadingType, AlignmentType = D.AlignmentType, BorderStyle = D.BorderStyle;
     var num = CRTP.numerosFigures(etat);
@@ -19,7 +36,7 @@
       opts = opts || {};
       return new Paragraph({
         alignment: opts.align,
-        spacing: { after: opts.after != null ? opts.after : 100 },
+        spacing: { after: esp(opts.after != null ? opts.after : 100) },
         keepNext: opts.keepNext,
         children: [new TextRun({ text: texte, bold: opts.bold, italics: opts.italics, color: opts.color, size: opts.size })]
       });
@@ -32,7 +49,7 @@
       return lignes.map(function (l) { return para(l, { after: l.trim() ? 80 : 40 }); });
     }
 
-    var bordure = { style: BorderStyle.SINGLE, size: 4, color: 'BFA48A' };
+    var bordure = { style: BorderStyle.SINGLE, size: 4, color: BORD };
     var bordures = { top: bordure, bottom: bordure, left: bordure, right: bordure };
 
     function cellule(enfants, opts) {
@@ -41,7 +58,7 @@
         width: { size: opts.largeur, type: WidthType.DXA },
         shading: opts.fond ? { type: ShadingType.CLEAR, color: 'auto', fill: opts.fond } : undefined,
         verticalAlign: D.VerticalAlign ? D.VerticalAlign.CENTER : undefined,
-        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        margins: { top: esp(60), bottom: esp(60), left: opts.marge != null ? opts.marge : 100, right: opts.marge != null ? opts.marge : 100 },
         borders: bordures,
         children: enfants
       });
@@ -52,7 +69,7 @@
     /* ---- Cartouche ---- */
     var l1 = 1300, l3 = 3600, l2 = LARGEUR_UTILE - l1 - l3;
     function ligneInfo(etiq, val) {
-      return new Paragraph({ spacing: { after: 40 }, children: [run(etiq + ' : ', { bold: true, color: ORANGE_FONCE }), run(val || '')] });
+      return new Paragraph({ spacing: { after: esp(40) }, children: [run(etiq + ' : ', { bold: true, color: TITRE }), run(val || '')] });
     }
     var cartouche = new Table({
       width: { size: LARGEUR_UTILE, type: WidthType.DXA },
@@ -60,11 +77,11 @@
       rows: [new TableRow({
         children: [
           cellule([
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [run('1re', { bold: true, color: 'FFFFFF', size: 28 })] }),
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [run('SI', { bold: true, color: 'FFFFFF', size: 36 })] })
-          ], { largeur: l1, fond: ORANGE }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [run(niveau.cas[0], { bold: true, color: 'FFFFFF', size: 28 })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [run(niveau.cas[1], { bold: true, color: 'FFFFFF', size: niveau.cas[1].length > 3 ? 28 : 36 })] })
+          ], { largeur: l1, fond: CARTOUCHE }),
           cellule([
-            new Paragraph({ spacing: { after: 60 }, children: [run('COMPTE RENDU DE TP', { bold: true, color: ORANGE_FONCE, size: 18 })] }),
+            new Paragraph({ spacing: { after: esp(60) }, children: [run('COMPTE RENDU DE TP — ' + niveau.nom.toUpperCase(), { bold: true, color: TITRE, size: 18 })] }),
             new Paragraph({ children: [run(ent.titre || 'Titre du TP', { bold: true, size: 28 })] })
           ], { largeur: l2 }),
           cellule([
@@ -83,15 +100,16 @@
       return new Paragraph({
         heading: D.HeadingLevel.HEADING_1,
         keepNext: true,
-        spacing: { before: 280, after: 140 },
-        shading: { type: ShadingType.CLEAR, color: 'auto', fill: ORANGE },
-        border: { left: { style: BorderStyle.SINGLE, size: 36, color: JAUNE, space: 4 } },
-        children: [run(' ' + n + '. ' + titre, { bold: true, color: 'FFFFFF', size: 26 })]
+        spacing: { before: esp(280), after: esp(140) },
+        shading: { type: ShadingType.CLEAR, color: 'auto', fill: BANDEAU },
+        border: { left: { style: BorderStyle.SINGLE, size: 36, color: ACCENT, space: 4 } },
+        children: [run(' ' + n + '. ' + titre, { bold: true, color: 'FFFFFF', size: compact ? 24 : 26 })]
       });
     }
 
-    for (var s = 0; s < CRTP.SECTIONS.length; s++) {
-      var sec = CRTP.SECTIONS[s];
+    var sections = CRTP.sectionsPour(etat.niveau);
+    for (var s = 0; s < sections.length; s++) {
+      var sec = sections[s];
       var donnees = etat.sections[sec.id];
       var vide = !donnees.texte.trim() && !donnees.images.length && !(sec.mesures && (etat.mesures.length || etat.calculs.length));
       if (vide && sec.facultatif) continue;
@@ -108,70 +126,81 @@
         enfants.push(new Paragraph({
           alignment: AlignmentType.CENTER,
           keepNext: true,
-          spacing: { before: 120, after: 60 },
+          spacing: { before: esp(120), after: esp(60) },
           children: [new D.ImageRun({ type: info.type, data: info.data, transformation: { width: w, height: h },
             altText: { name: 'Figure ' + num[im.id], description: im.legende || 'Figure', title: 'Figure ' + num[im.id] } })]
         }));
         enfants.push(new Paragraph({
           alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
+          spacing: { after: esp(200) },
           children: [run('Figure ' + num[im.id] + ' : ', { bold: true, italics: true, size: 20 }), run(im.legende || '(légende manquante)', { italics: true, size: 20 })]
         }));
       }
 
       if (sec.mesures && etat.mesures.length) {
-        var largeurs = [2250, 1250, 1450, 1700, 950, 2038];
-        var entetes = ['Grandeur', 'Symbole', 'Valeur théorique', 'Valeur simulée / mesurée', 'Unité', 'Écart relatif (%)'];
+        var cols = CRTP.colonnesMesures(etat);
+        var inc = CRTP.avecIncertitudes(etat);
+        // largeurs relatives des colonnes, ramenées à la largeur utile
+        var poids = { grandeur: 2.45, symbole: 1.1, theo: 1.2, uref: 1, mes: 1.2, u: 1, unite: 0.75, ecart: 1, z: 1.8 };
+        if (!inc) poids = { grandeur: 2.25, symbole: 1.25, theo: 1.45, mes: 1.7, unite: 0.95, ecart: 2.04 };
+        var somme = cols.reduce(function (a, c) { return a + poids[c.cle]; }, 0);
+        var largeurs = cols.map(function (c) { return Math.floor(LARGEUR_UTILE * poids[c.cle] / somme); });
+        var tailleTab = inc ? 16 : 20;
+        var marge = inc ? 50 : 100;
         var lignes = [new TableRow({
           tableHeader: true,
-          children: entetes.map(function (t, k) {
-            return cellule([new Paragraph({ alignment: AlignmentType.CENTER, children: [run(t, { bold: true, color: 'FFFFFF', size: 20 })] })],
-              { largeur: largeurs[k], fond: ORANGE_FONCE });
+          children: cols.map(function (c, j) {
+            var nom = c.cle === 'u' || c.cle === 'uref' ? c.court : c.nom;   // en-têtes courts : colonnes étroites
+            return cellule([new Paragraph({ alignment: AlignmentType.CENTER, children: [run(nom, { bold: true, color: 'FFFFFF', size: tailleTab })] })],
+              { largeur: largeurs[j], fond: ENTETE_TAB, marge: marge });
           })
         })];
         etat.mesures.forEach(function (m, r) {
-          var v = CRTP.ecart(m.theo, m.mes);
-          var vals = [m.grandeur, m.symbole, m.theo, m.mes, m.unite, v == null ? '—' : CRTP.formatEcart(v) + ' %'];
           lignes.push(new TableRow({
-            children: vals.map(function (t, k) {
-              return cellule([new Paragraph({ alignment: k >= 2 ? AlignmentType.CENTER : AlignmentType.LEFT, children: [run(t, { size: 20 })] })],
-                { largeur: largeurs[k], fond: r % 2 ? GRIS : undefined });
+            cantSplit: true,
+            children: cols.map(function (c, j) {
+              var t = CRTP.texteCellule(m, c);
+              var rouge = c.cle === 'z' && / \(non /.test(t);
+              return cellule([new Paragraph({ alignment: j >= 2 ? AlignmentType.CENTER : AlignmentType.LEFT,
+                children: [run(t, { size: tailleTab, bold: rouge, color: rouge ? 'B3261E' : undefined })] })],
+                { largeur: largeurs[j], fond: r % 2 ? LIGNE : undefined, marge: marge });
             })
           }));
         });
-        enfants.push(para('Tableau de mesures', { bold: true, color: ORANGE_FONCE, keepNext: true, after: 60 }));
+        enfants.push(para('Tableau de mesures', { bold: true, color: TITRE, keepNext: true, after: 60 }));
         enfants.push(new Table({ width: { size: LARGEUR_UTILE, type: WidthType.DXA }, columnWidths: largeurs, rows: lignes }));
-        enfants.push(para('Écart relatif = |valeur mesurée − valeur théorique| / |valeur théorique| × 100', { italics: true, size: 18, color: '555555' }));
+        enfants.push(para('Écart relatif = |valeur mesurée − valeur théorique| / |valeur théorique| × 100', { italics: true, size: 18, color: '555555', after: inc ? 20 : 100 }));
+        if (inc) enfants.push(para(CRTP.LEGENDE_Z, { italics: true, size: 18, color: '555555' }));
       }
 
       if (sec.mesures && etat.calculs.length) {
-        enfants.push(para('Calculs', { bold: true, color: ORANGE_FONCE, keepNext: true, after: 60 }));
+        enfants.push(para('Calculs', { bold: true, color: TITRE, keepNext: true, after: 60 }));
         etat.calculs.forEach(function (c, k) {
           enfants.push(new Table({
             width: { size: LARGEUR_UTILE, type: WidthType.DXA },
             columnWidths: [LARGEUR_UTILE],
             rows: [new TableRow({ cantSplit: true, children: [cellule([
-              new Paragraph({ spacing: { after: 40 }, children: [run('Calcul ' + (k + 1) + (c.titre.trim() ? ' — ' + c.titre : ''), { bold: true, color: ORANGE_FONCE })] }),
-              new Paragraph({ spacing: { after: 20 }, children: [run('Formule : ', { bold: true }), run(c.formule)] }),
-              new Paragraph({ spacing: { after: 20 }, children: [run('Application numérique : ', { bold: true }), run(c.application)] }),
+              new Paragraph({ spacing: { after: esp(40) }, children: [run('Calcul ' + (k + 1) + (c.titre.trim() ? ' — ' + c.titre : ''), { bold: true, color: TITRE })] }),
+              new Paragraph({ spacing: { after: esp(20) }, children: [run('Formule : ', { bold: true }), run(c.formule)] }),
+              new Paragraph({ spacing: { after: esp(20) }, children: [run('Application numérique : ', { bold: true }), run(c.application)] }),
               new Paragraph({ children: [run('Résultat : ', { bold: true }), run((c.resultat + ' ' + c.unite).trim(), { bold: true })] })
             ], { largeur: LARGEUR_UTILE, fond: CLAIR })] })]
           }));
-          enfants.push(para('', { after: 60 }));
+          enfants.push(para('', { after: compact ? 0 : 60, size: compact ? 8 : undefined }));
         });
       }
     }
 
     var doc = new D.Document({
-      creator: 'Compte rendu de TP — 1re SI',
+      creator: 'Labrio — compte rendu de TP — ' + niveau.nom,
       title: ent.titre || 'Compte rendu de TP',
       description: 'Compte rendu de TP',
       styles: {
-        default: { document: { run: { font: 'Arial', size: 22 } } },
+        default: { document: { run: { font: 'Arial', size: TAILLE } } },
         paragraphStyles: [{
           id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
           run: { font: 'Arial', size: 26, bold: true, color: 'FFFFFF' },
-          paragraph: { spacing: { before: 280, after: 140 }, outlineLevel: 0 }
+          paragraph: { spacing: { before: esp(280), after: esp(140) }, outlineLevel: 0 }
         }]
       },
       sections: [{
@@ -181,7 +210,7 @@
             children: [new Paragraph({
               alignment: AlignmentType.RIGHT,
               children: [
-                run((ent.noms ? ent.noms + ' — ' : '') + 'Compte rendu de TP — page ', { size: 16, color: '666666' }),
+                run((ent.noms ? ent.noms + ' — ' : '') + 'Compte rendu de TP — ' + niveau.nom + ' — page ', { size: 16, color: '666666' }),
                 new TextRun({ children: [D.PageNumber.CURRENT], size: 16, color: '666666' }),
                 run(' / ', { size: 16, color: '666666' }),
                 new TextRun({ children: [D.PageNumber.TOTAL_PAGES], size: 16, color: '666666' })
